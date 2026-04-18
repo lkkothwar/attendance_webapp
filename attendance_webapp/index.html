@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EJ Attendance WebApp</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light p-4">
+    <div class="container bg-white p-5 rounded shadow">
+        <h2 class="text-center text-primary mb-4">Professional Attendance Portal</h2>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <button class="btn btn-primary w-100" onclick="showForm()">📋 Mark Attendance</button>
+            </div>
+            <div class="col-md-6">
+                <button class="btn btn-success w-100" onclick="loadReport()">📊 View Reports</button>
+            </div>
+        </div>
+
+        <div id="contentArea">
+            <p class="text-center text-muted">Select an action above to begin.</p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "https://your-backend-url.render.com"; // Change after deployment
+
+        async function loadReport() {
+            const course = prompt("Enter Course Code:");
+            if (!course) return;
+
+            const res = await fetch(`${API_URL}/report/${course}`);
+            const data = await res.json();
+            
+            let html = `<h3>Report for ${course}</h3><table class="table table-bordered"><tr><th>Student</th><th>Date</th><th>Status</th></tr>`;
+            data.forEach(row => {
+                html += `<tr><td>${row.student_name}</td><td>${row.date}</td><td>${row.status}</td></tr>`;
+            });
+            html += `</table>`;
+            document.getElementById('contentArea').innerHTML = html;
+        }
+
+        // Logic for marking attendance would go here, 
+        // sending a POST request to ${API_URL}/attendance/
+    </script>
+</body>
+</html>
