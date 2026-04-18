@@ -1,37 +1,37 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Date, Text
+from sqlalchemy import create_engine, Column, Integer, String, Date, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
 from datetime import date
 from typing import List, Optional
 
-# 1. DATABASE CONFIGURATION
-# Replace the URL below with your Neon.tech connection string
+# --- 1. Database Configuration (Neon.tech / Supabase) ---
 DATABASE_URL = "postgresql://neondb_owner:npg_w5n7SxXNgiHo@ep-mute-thunder-anmbcppr.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require"
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 2. DATABASE MODELS
-class AttendanceRecord(Base):
-    __tablename__ = "attendance"
+# --- 2. Database Model ---
+class Attendance(Base):
+    __tablename__ = "attendance_records"
     id = Column(Integer, primary_key=True, index=True)
-    student_name = Column(String, index=True)
-    course_code = Column(String, index=True)
-    status = Column(String) # 'P' or 'A'
-    type = Column(String)   # 'TH' or 'PR'
-    batch = Column(String, nullable=True)
+    year = Column(String)         # FY, SY, TY
+    student_name = Column(String)
+    course_code = Column(String)
+    course_abbr = Column(String)
+    type = Column(String)         # TH or PR
+    batch = Column(String, nullable=True) # A, B, C
+    status = Column(String)       # P or A
     date = Column(Date, default=date.today)
 
 Base.metadata.create_all(bind=engine)
 
-# 3. FASTAPI SETUP
-app = FastAPI()
+# --- 3. FastAPI App Setup ---
+app = FastAPI(title="EJ Attendance API")
 
-# Enable CORS so your frontend can talk to your backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,32 +39,51 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Pydantic schema for data validation
-class AttendanceCreate(BaseModel):
+# Pydantic Schemas
+class AttendanceEntry(BaseModel):
     student_name: str
-    course_code: str
     status: str
+
+class MarkAttendanceRequest(BaseModel):
+    year: str
+    course_code: str
+    course_abbr: str
     type: str
     batch: Optional[str] = None
+    students: List[AttendanceEntry]
 
-@app.post("/attendance/")
-def mark_attendance(records: List[AttendanceCreate]):
+# --- 4. API Endpoints ---
+
+@app.post("/submit-attendance")
+def submit_attendance(req: MarkAttendanceRequest):
     db = SessionLocal()
     try:
-        for item in records:
-            db_record = AttendanceRecord(**item.dict())
-            db.add(db_record)
+        new_records = [
+            Attendance(
+                year=req.year,
+                course_code=req.course_code,
+                course_abbr=req.course_abbr,
+                type=req.type,
+                batch=req.batch,
+                student_name=s.student_name,
+                status=s.status
+            ) for s in req.students
+        ]
+        db.add_all(new_records)
         db.commit()
-        return {"status": "success", "message": f"{len(records)} records saved"}
+        return {"message": "Attendance saved successfully"}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
-@app.get("/report/{course_code}")
-def get_report(course_code: str):
+@app.get("/report/{year}/{course_code}")
+def get_report(year: str, course_code: str):
     db = SessionLocal()
-    results = db.query(AttendanceRecord).filter(AttendanceRecord.course_code == course_code).all()
+    records = db.query(Attendance).filter(
+        Attendance.year == year, 
+        Attendance.course_code == course_code
+    ).all()
     db.close()
-    return results
+    return records
